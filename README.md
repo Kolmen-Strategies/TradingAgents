@@ -27,9 +27,43 @@
 
 # TradingAgents: Multi-Agents LLM Financial Trading Framework
 
+Kolmen Strategies fork of [Tauric Research/TradingAgents](https://github.com/TauricResearch/TradingAgents), package version 0.2.4 in this snapshot. This is an **on-demand research and recommendation pipeline**. It produces reports and a five-tier rating; it does not execute simulated or live exchange orders.
+
+## Feature verification — 2026-11-25
+
+Source snapshot: `7c37249`. “Implemented” means source is connected; test evidence is limited to the stated scope. Missing advertised behavior is retained in [ROADMAP.md](ROADMAP.md).
+
+| Capability | Implementation / actual behavior | Test evidence |
+|---|---|---|
+| Fundamentals, technical, news and sentiment analyst roles | `tradingagents/agents/analysts/`, `graph/setup.py`; tool-driven LLM reports | Graph/agent code inspected; full analyst run against live data/LLMs not tested |
+| Social sentiment | `agents/analysts/social_media_analyst.py` has only the `get_news` tool; no dedicated social-post collector or sentiment-scoring algorithm | Source reviewed; real social feeds/scoring remain roadmap |
+| Bull/bear research debate and research-manager decision | `agents/researchers/`, `agents/managers/research_manager.py`, `graph/conditional_logic.py` | Mocked research-manager and structured-output behavior in `tests/test_structured_agents.py`; not a full research-debate integration test |
+| Trader proposal and risk debate / Portfolio Manager report | `agents/trader/`, `agents/risk_mgmt/`, `agents/managers/portfolio_manager.py` | Trader schema/render/fallback paths tested with mocks. Live portfolio monitoring, order approval/execution and risk enforcement are absent |
+| Final five-tier rating | `agents/utils/rating.py`, `graph/signal_processing.py`; Buy, Overweight, Hold, Underweight, Sell | `tests/test_signal_processing.py` passed; rating extraction is deterministic, not an exchange action |
+| Multi-provider client factory | `llm_clients/factory.py`: OpenAI, xAI, DeepSeek, Qwen, GLM, Ollama, OpenRouter, Anthropic, Google, Azure | Model validation and Google key handling tests passed; no live provider/model or Azure deployment tests. No Bedrock client |
+| Configurable dates, tickers, models, language and debate depth | `default_config.py`, `cli/main.py`, `agents/utils/agent_utils.py` | Ticker/instrument normalization tests passed. All language/provider combinations and historical point-in-time fidelity untested |
+| Yahoo Finance / Alpha Vantage stock, indicators, financial statements, news and insider tools | `dataflows/interface.py`, vendor modules; configured vendor routing, rate-limit fallback | Present; full live tools not exercised. An analysis date is not a complete historical backtest or point-in-time dataset |
+| Interactive CLI and Python API | `cli/main.py`, `graph/trading_graph.py`; `propagate(ticker, date)` returns state and rating and writes reports | Package installed successfully; CLI help and flag dispatch checked with `CliRunner` and a mocked analysis function. Full interactive or real-model analysis untested |
+| Persistent decision log and deferred reflection | `agents/utils/memory.py`, `graph/trading_graph.py`; same-ticker future run resolves pending outcomes when data is available | `tests/test_memory_log.py` passed with local files/mocks; no evidence of improved investment performance |
+| SQLite checkpoint/resume and clearing | `graph/checkpointer.py`, `graph/trading_graph.py`, CLI flags | `tests/test_checkpoint_resume.py` passed using a small synthetic LangGraph; full trading-graph crash/recovery with providers untested |
+| Docker and optional Ollama service | `Dockerfile`, `docker-compose.yml` | Files reviewed; containers not built/run. Select Ollama in the CLI/config and use the service endpoint; compose's `LLM_PROVIDER` variable is not consumed by `DEFAULT_CONFIG` |
+| Simulated/live exchange execution, positions, fills and continuous risk management | No execution/accounting path after `propagate()` returns the recommendation | Not implemented; roadmap |
+
+Checks run with Python 3.12 in an isolated environment: install package plus pytest, then `python -m pytest -q` → **92 passed, 40 subtests passed**. These are local/unit/mock checks, not live trading tests. No end-to-end LLM, market-data, Docker, broker or profitability validation was performed. There is no checked-in GitHub Actions test workflow in this snapshot.
+
+To reproduce:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install . pytest
+python -m pytest -q
+tradingagents --help
+```
+
 ## News
 - [2026-04] **TradingAgents v0.2.4** released with structured-output agents (Research Manager, Trader, Portfolio Manager), LangGraph checkpoint resume, persistent decision log, DeepSeek/Qwen/GLM/Azure provider support, Docker, and a Windows UTF-8 encoding fix. See [CHANGELOG.md](CHANGELOG.md) for the full list.
-- [2026-03] **TradingAgents v0.2.3** released with multi-language support, GPT-5.4 family models, unified model catalog, backtesting date fidelity, and proxy support.
+- [2026-03] **TradingAgents v0.2.3** released with multi-language support, GPT-5.4 family models, unified model catalog, historical analysis-date handling, and proxy support.
 - [2026-03] **TradingAgents v0.2.2** released with GPT-5.4/Gemini 3.1/Claude 4.6 model coverage, five-tier rating scale, OpenAI Responses API, Anthropic effort control, and cross-platform stability.
 - [2026-02] **TradingAgents v0.2.0** released with multi-provider LLM support (GPT-5.x, Gemini 3.x, Claude 4.x, Grok 4.x) and improved system architecture.
 - [2026-01] **Trading-R1** [Technical Report](https://arxiv.org/abs/2509.11420) released, with [Terminal](https://github.com/TauricResearch/Trading-R1) expected to land soon.
@@ -68,7 +102,7 @@ Our framework decomposes complex trading tasks into specialized roles. This ensu
 
 ### Analyst Team
 - Fundamentals Analyst: Evaluates company financials and performance metrics, identifying intrinsic values and potential red flags.
-- Sentiment Analyst: Analyzes social media and public sentiment using sentiment scoring algorithms to gauge short-term market mood.
+- Sentiment Analyst: Asks an LLM to interpret the available news tool output. Dedicated social-media collection and sentiment-scoring algorithms remain roadmap work.
 - News Analyst: Monitors global news and macroeconomic indicators, interpreting the impact of events on market conditions.
 - Technical Analyst: Utilizes technical indicators (like MACD and RSI) to detect trading patterns and forecast price movements.
 
@@ -91,8 +125,8 @@ Our framework decomposes complex trading tasks into specialized roles. This ensu
 </p>
 
 ### Risk Management and Portfolio Manager
-- Continuously evaluates portfolio risk by assessing market volatility, liquidity, and other risk factors. The risk management team evaluates and adjusts trading strategies, providing assessment reports to the Portfolio Manager for final decision.
-- The Portfolio Manager approves/rejects the transaction proposal. If approved, the order will be sent to the simulated exchange and executed.
+- During an analysis run, risk agents debate the proposal and provide text reports to the Portfolio Manager. This is qualitative assessment, without continuous account monitoring or enforced exposure limits.
+- The Portfolio Manager produces a final recommendation. No simulated exchange, broker order or fill processing follows it in this repository; see ROADMAP.md.
 
 <p align="center">
   <img src="assets/risk.png" width="70%" style="display: inline-block; margin: 0 2%;">
@@ -104,7 +138,7 @@ Our framework decomposes complex trading tasks into specialized roles. This ensu
 
 Clone TradingAgents:
 ```bash
-git clone https://github.com/TauricResearch/TradingAgents.git
+git clone https://github.com/Kolmen-Strategies/TradingAgents.git
 cd TradingAgents
 ```
 
@@ -148,7 +182,7 @@ export OPENROUTER_API_KEY=...      # OpenRouter
 export ALPHA_VANTAGE_API_KEY=...   # Alpha Vantage
 ```
 
-For enterprise providers (e.g. Azure OpenAI, AWS Bedrock), copy `.env.enterprise.example` to `.env.enterprise` and fill in your credentials.
+For the implemented Azure OpenAI client, copy `.env.enterprise.example` to `.env.enterprise` and fill in your credentials.
 
 For local models, configure Ollama with `llm_provider: "ollama"` in your config.
 
@@ -226,19 +260,19 @@ TradingAgents persists two kinds of state across runs.
 
 ### Decision log
 
-The decision log is always on. Each completed run appends its decision to `~/.tradingagents/memory/trading_memory.md`. On the next run for the same ticker, TradingAgents fetches the realised return (raw and alpha vs SPY), generates a one-paragraph reflection, and injects the most recent same-ticker decisions plus recent cross-ticker lessons into the Portfolio Manager prompt, so each analysis carries forward what worked and what didn't.
+The decision log is always on. Each completed run appends its decision to `~/.tradingagents/memory/trading_memory.md`. On a later run for the same ticker, when return data is available, TradingAgents fetches the price-based return (raw and alpha vs SPY), generates a one-paragraph reflection, and injects the most recent same-ticker decisions plus recent cross-ticker lessons into the Portfolio Manager prompt, so each analysis carries forward what worked and what didn't.
 
 Override the path with `TRADINGAGENTS_MEMORY_LOG_PATH`.
 
 ### Checkpoint resume
 
-Checkpoint resume is opt-in via `--checkpoint`. When enabled, LangGraph saves state after each node so a crashed or interrupted run resumes from the last successful step instead of starting over. On a resume run you will see `Resuming from step N for <TICKER> on <date>` in the logs; on a new run you will see `Starting fresh`. Checkpoints are cleared automatically on successful completion.
+Checkpoint resume is opt-in via `--checkpoint`. When enabled, LangGraph saves state after each node so a crashed or interrupted run resumes from the last successful step instead of starting over. On a resume run you will see `Resuming from step N for <TICKER> on <date>` in the logs; on a new run you will see `Starting fresh`. Checkpoints are cleared automatically on successful completion. In this single-command CLI, use `tradingagents --checkpoint`; the former `tradingagents analyze ...` spelling is rejected as an extra argument.
 
 Per-ticker SQLite databases live at `~/.tradingagents/cache/checkpoints/<TICKER>.db` (override the base with `TRADINGAGENTS_CACHE_DIR`). Use `--clear-checkpoints` to reset all of them before a run.
 
 ```bash
-tradingagents analyze --checkpoint           # enable for this run
-tradingagents analyze --clear-checkpoints    # reset before running
+tradingagents --checkpoint           # enable for this run
+tradingagents --clear-checkpoints    # reset before running
 ```
 
 ```python
